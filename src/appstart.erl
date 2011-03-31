@@ -47,8 +47,8 @@ start(App, Type) when is_atom(App) ->
     case lookup_app(App) of
         already_loaded ->
             already_loaded;
-        non_existing ->
-            {error, non_existing};
+        {error,_}=Err ->
+            Err;
         Path ->
             {ok, AppData} = file:consult(Path),
             [{application, App, Config}] = AppData,
@@ -79,11 +79,11 @@ lookup_appfile(App) ->
 find_irregular_appfile(App, AppFile) ->
     case code:lib_dir(App, src) of
         {error, bad_name} ->
-            non_existing;
+            {error,{no_lib_dir, App}};
         LibDir ->
             case filelib:wildcard(filename:join(LibDir, AppFile) ++ "*") of
                 [F] -> F;
-                _ -> non_existing
+                _ -> {error, {no_app_file, App}}
             end
     end.
 
