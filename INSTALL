@@ -1,0 +1,7 @@
+Installation
+
+== From Sources
+
+Simply run `rebar compile' and copy the directory to somewhere
+useful (or add it to your ERL_LIBS environment variable).
+
