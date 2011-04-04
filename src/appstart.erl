@@ -65,7 +65,8 @@ start_app(App, Config, Type) ->
     case start_app_deps(Config) of
         {error, _}=Error ->
             Error;
-        _ -> application:start(App, Type)
+        _ -> 
+            application:start(App, Type)
     end.
 
 start_it(App, Type, Callback) ->
@@ -77,6 +78,7 @@ start_it(App, Type, Callback) ->
         Path ->
             {ok, AppData} = file:consult(Path),
             [{application, App, Config}] = AppData,
+            %% TODO: check for configuration overrides here....
             Callback(App, Config, Type)
     end.
 
