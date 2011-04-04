@@ -2,6 +2,20 @@
 
 This small library aims to help with OTP application startup and shutdown.
 
+## Usage
+
+Start up your application and all its dependencies:
+
+	appstart:start(myapp).
+
+Specify a startup type:
+
+	appstart:start(myapp, permanent).
+	
+Start up you application's dependencies without starting your app:
+
+	appstart:start_deps(myapp).
+
 ## Status
 
 This project is in alpha at the moment.
