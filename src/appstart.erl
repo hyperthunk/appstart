@@ -28,7 +28,7 @@
 %% -----------------------------------------------------------------------------
 
 -module(appstart).
--export([start/1, start/2]).
+-export([start/1, start/2, start_deps/1]).
 
 -define(FIND_ERROR_PREDICATE, fun({error, _}) -> true; (_) -> false end).
 
@@ -44,6 +44,31 @@ start(App) ->
 start(App, _) when App =:= kernel, App =:= stdlib ->
     ok;
 start(App, Type) when is_atom(App) ->
+    start_it(App, Type, fun start_app/3).
+
+start_deps(App) ->
+    start_it(App, ignored, fun start_deps/3).
+
+start_deps(_, Config, _) ->
+    start_app_deps(Config).
+
+start_app_deps(Config) ->
+    Apps = [start(A) || A <- proplists:get_value(applications, Config, [])],
+    case lists:any(?FIND_ERROR_PREDICATE, Apps) of
+        true ->
+            {error, {dependents, lists:filter(?FIND_ERROR_PREDICATE, Apps)}};
+        false ->
+            Apps
+    end.
+
+start_app(App, Config, Type) ->
+    case start_app_deps(Config) of
+        {error, _}=Error ->
+            Error;
+        _ -> application:start(App, Type)
+    end.
+
+start_it(App, Type, Callback) ->
     case lookup_app(App) of
         already_loaded ->
             already_loaded;
@@ -52,7 +77,7 @@ start(App, Type) when is_atom(App) ->
         Path ->
             {ok, AppData} = file:consult(Path),
             [{application, App, Config}] = AppData,
-            start_app(App, Config, Type)
+            Callback(App, Config, Type)
     end.
 
 lookup_app(App) ->
@@ -85,13 +110,4 @@ find_irregular_appfile(App, AppFile) ->
                 [F] -> F;
                 _ -> {error, {no_app_file, App}}
             end
-    end.
-
-start_app(App, Config, Type) ->
-    Apps = [start(A) || A <- proplists:get_value(applications, Config, [])],
-    case lists:any(?FIND_ERROR_PREDICATE, Apps) of
-        true ->
-            {error, {dependents, lists:filter(?FIND_ERROR_PREDICATE, Apps)}};
-        false ->
-            application:start(App, Type)
     end.
