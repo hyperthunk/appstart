@@ -97,12 +97,12 @@ lookup_appfile(App) ->
     AppFile = atom_to_list(App) ++ ".app",
     case code:where_is_file(AppFile) of
         non_existing ->
-            %% TODO: fail fast?
             find_irregular_appfile(App, AppFile);
         Path ->
             Path
     end.
 
+%% because not everyone follows OTP principles...
 find_irregular_appfile(App, AppFile) ->
     case code:lib_dir(App, src) of
         {error, bad_name} ->

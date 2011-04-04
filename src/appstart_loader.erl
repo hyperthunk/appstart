@@ -43,13 +43,8 @@
 start(StartType, StartArgs) ->
     {ok, App} = application:get_application(),
     appstart:start_deps(App),
-
     Env = application:get_all_env(),
-    io:format("Env: ~p~n", [Env]),
-
     AppStart = proplists:get_value(appstart, Env),
-    io:format("AppStart: ~p~n", [AppStart]),
-
     Conf = proplists:get_value(startup, AppStart, 
                                [?MODULE, fail, [Env]]),
     call_handler(StartType, StartArgs, Conf).
