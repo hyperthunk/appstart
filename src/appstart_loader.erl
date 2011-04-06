@@ -63,20 +63,26 @@ stop(State) ->
 %% @hidden
 %%
 fail(Env, _) ->
-    {error, {noconfig, Env}}.
+    {error, {badconfig, Env}}.
 
 call_handler(StartType, StartArgs, [M], Env) ->
     call_handler(StartType, StartArgs, [M, start_link, Env], Env);
 call_handler(StartType, StartArgs, [M,F|[]], Env) ->
     call_handler(StartType, StartArgs, [M,F|Env], ignored);
 call_handler(StartType, StartArgs, [M,F|Rest]=Conf, _Env) ->
-    case lists:keyfind(F, 1, M:module_info(exports)) of
-        {F, 0} ->
+    %% choosing the max arity version of F guarantees we don't *loose*
+    %% any information that the startup handling module might want...
+    Arity = case proplists:get_all_values(F, M:module_info(exports)) of
+        [N] -> N;
+        [_|_]=NS -> lists:max(NS)
+    end,
+    case Arity of
+        0 ->
             apply(M, F, []);
-        {F, 1} ->
+        1 ->
             apply(M, F, [StartArgs ++ Rest]);
-        {F, 2} ->
+        2 ->
             apply(M, F, [StartType, StartArgs ++ Rest]);
-        false ->            
+        _ ->            
             fail(Conf, ignored)
     end.
