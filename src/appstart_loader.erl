@@ -43,11 +43,17 @@
 start(StartType, StartArgs) ->
     {ok, App} = application:get_application(),
     appstart:start_deps(App),
+    Options = case lists:keytake(fastlog, 1, StartArgs) of
+        {value, {fastlog, configure}, Opts} ->
+            fastlog:configure(App),
+            Opts;
+        _ -> StartArgs
+    end,
     Env = application:get_all_env(App),
     AppStart = proplists:get_value(appstart, Env),
     Conf = proplists:get_value(startup, AppStart, 
                                [?MODULE, fail, [Env]]),
-    call_handler(StartType, StartArgs, Conf, Env).
+    call_handler(StartType, Options, Conf, Env).
 
 stop(State) ->
     Env = application:get_all_env(),
