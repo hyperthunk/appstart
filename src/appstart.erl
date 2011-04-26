@@ -36,7 +36,7 @@
 -define(FIND_ERROR_PREDICATE, fun({error, _}) -> true; (_) -> false end).
 
 load(App) ->
-    appstart_loader:load(App).
+    appstarter:load(App).
 
 %% @doc Starts the OTP application `AppName', forcing all dependent applications
 %% to start first. For example, if you application specification contains a

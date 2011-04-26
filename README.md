@@ -22,7 +22,7 @@ Configure appstart to act as your `<name>_app` module for simple cases:
 	 example,
 	 [{description,"Example using appstart to load my app"},
 	  {vsn,"0.0.1"},
-	  {mod,{appstart_loader,[]}},
+	  {mod,{appstarter,[]}},
 	  {modules,[example_sup, example_srv]},
 	  {registered,[]},
 	  {applications,[kernel,stdlib]},
