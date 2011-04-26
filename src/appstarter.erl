@@ -29,12 +29,15 @@
 %%
 %% -----------------------------------------------------------------------------
 
--module(appstart_loader).
+-module(appstarter).
 -author('Tim Watson <watson.timothy@gmail.com>').
 -behaviour(application).
 
--export([start/2, stop/1]).
+-export([start/2, stop/1, load/1]).
 -export([fail/2]).
+
+load(App) ->
+    application:load(App).
 
 %% ===================================================================
 %% Application callbacks

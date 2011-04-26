@@ -28,9 +28,15 @@
 %% -----------------------------------------------------------------------------
 
 -module(appstart).
--export([start/1, start/2, start_deps/1]).
+-export([start/1, 
+         start/2, 
+         start_deps/1,
+         load/1]).
 
 -define(FIND_ERROR_PREDICATE, fun({error, _}) -> true; (_) -> false end).
+
+load(App) ->
+    appstart_loader:load(App).
 
 %% @doc Starts the OTP application `AppName', forcing all dependent applications
 %% to start first. For example, if you application specification contains a
