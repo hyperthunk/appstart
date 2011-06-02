@@ -80,10 +80,24 @@ start_it(App, Type, Callback) ->
         already_loaded ->
             already_loaded;
         {error,_}=Err ->
+            io:format("Failed to lookup ~p~n", [App]),
             Err;
-        Path ->
-            {ok, AppData} = file:consult(Path),
-            [{application, App, Config}] = AppData,
+        {load_from, _Path} ->
+            %% we're looking at one of two possible situations:
+            %% (a) the lib_dir for App is in an .ez archive 
+            %% (b) we're running on beam loaded into an escript (archive)
+            case application:load(App) of
+                {error, {already_loaded, App}} ->
+                    already_loaded;
+                {error, _}=Failed ->
+                    io:format("Failed to load ~p [~p]~n", [App, Failed]),
+                    Failed;
+                ok ->
+                    io:format("Loaded ~p~n", [App]),
+                    {ok, KeySet} = application:get_all_key(App),
+                    Callback(App, KeySet, Type)
+            end;
+        {application, App, Config} ->
             %% TODO: check for configuration overrides here....
             Callback(App, Config, Type)
     end.
@@ -105,17 +119,45 @@ lookup_appfile(App) ->
         non_existing ->
             find_irregular_appfile(App, AppFile);
         Path ->
-            Path
+            case filelib:is_regular(Path) of
+                true ->
+                    sanitize_path(Path);
+                false ->
+                    find_irregular_appfile(App, AppFile)
+            end
+    end.
+
+sanitize_path(Path) ->
+    case lists:prefix(code:lib_dir(), Path) of
+        true ->
+            {load_from, Path};
+        false ->
+            case file:consult(Path) of
+                {ok, {application, _App, _Config}=AppData} ->
+                   AppData;
+                {error, _} ->
+                    {load_from, Path}
+            end
     end.
 
 %% because not everyone follows OTP principles...
 find_irregular_appfile(App, AppFile) ->
     case code:lib_dir(App, src) of
         {error, bad_name} ->
-            {error,{no_lib_dir, App}};
+            {error, {no_lib_dir, App}};
         LibDir ->
-            case filelib:wildcard(filename:join(LibDir, AppFile) ++ "*") of
-                [F] -> F;
-                _ -> {error, {no_app_file, App}}
+            case filelib:is_dir(LibDir) of
+                true ->
+                    find_in_libdir(App, AppFile, LibDir);
+                false ->
+                    {load_from, LibDir}
             end
+    end.
+
+find_in_libdir(App, AppFile, LibDir) ->
+    case filelib:wildcard(filename:join(LibDir, AppFile) ++ "*") of
+        [F] -> 
+            sanitize_path(F);
+        _ -> 
+            {error, {no_app_file, App}}
     end.
