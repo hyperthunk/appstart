@@ -80,7 +80,6 @@ start_it(App, Type, Callback) ->
         already_loaded ->
             already_loaded;
         {error,_}=Err ->
-            io:format("Failed to lookup ~p~n", [App]),
             Err;
         {load_from, _Path} ->
             %% we're looking at one of two possible situations:
@@ -90,10 +89,8 @@ start_it(App, Type, Callback) ->
                 {error, {already_loaded, App}} ->
                     already_loaded;
                 {error, _}=Failed ->
-                    io:format("Failed to load ~p [~p]~n", [App, Failed]),
                     Failed;
                 ok ->
-                    io:format("Loaded ~p~n", [App]),
                     {ok, KeySet} = application:get_all_key(App),
                     Callback(App, KeySet, Type)
             end;
