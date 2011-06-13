@@ -45,18 +45,18 @@ load(App) ->
 
 start(StartType, StartArgs) ->
     {ok, App} = application:get_application(),
-    appstart:start_deps(App),
+    Env = application:get_all_env(App),
+    AppStart = proplists:get_value(appstart, Env),
+    appstart:start_deps(App, AppStart),
     Options = case lists:keytake(fastlog, 1, StartArgs) of
         {value, {fastlog, configure}, Opts} ->
             fastlog:configure(App),
             Opts;
         _ -> StartArgs
     end,
-    Env = application:get_all_env(App),
-    AppStart = proplists:get_value(appstart, Env),
     Conf = proplists:get_value(startup, AppStart, 
                                [?MODULE, fail, [Env]]),
-    call_handler(StartType, Options, Conf, Env).
+    call_handler(StartType, Options, Conf, Env, AppStart).
 
 stop(State) ->
     Env = application:get_all_env(),
@@ -65,7 +65,7 @@ stop(State) ->
         undefined ->
             ok;
         Conf ->
-            call_handler(ignored, [State], Conf, Env)
+            call_handler(ignored, [State], Conf, Env, AppStart)
     end.
 
 %%
@@ -74,24 +74,35 @@ stop(State) ->
 fail(Env, _) ->
     {error, {badconfig, Env}}.
 
-call_handler(StartType, StartArgs, [M], Env) ->
-    call_handler(StartType, StartArgs, [M, start_link, Env], Env);
-call_handler(StartType, StartArgs, [M,F|[]], Env) ->
-    call_handler(StartType, StartArgs, [M,F|Env], ignored);
-call_handler(StartType, StartArgs, [M,F|Rest]=Conf, _Env) ->
+call_handler(StartType, StartArgs, [M], Env, Options) ->
+    call_handler(StartType, StartArgs, [M, start_link, Env], Env, Options);
+call_handler(StartType, StartArgs, [M,F|[]], Env, Options) ->
+    call_handler(StartType, StartArgs, [M,F|Env], ignored, Options);
+call_handler(StartType, StartArgs, [M,F|Rest]=Conf, Env, Options) ->
     %% choosing the max arity version of F guarantees we don't *loose*
     %% any information that the startup handling module might want...
+    appstart:notify("call_handler ~p, ~p, ~p, ~p, ~p~n", 
+                    [StartType, StartArgs, Conf, Env, Options], Options),
     Arity = case proplists:get_all_values(F, M:module_info(exports)) of
         [N] -> N;
         [_|_]=NS -> lists:max(NS)
     end,
     case Arity of
         0 ->
-            apply(M, F, []);
+            Arg0 = [],
+            notify_handler_executing(M, F, Arg0, Options),
+            apply(M, F, Arg0);
         1 ->
-            apply(M, F, [StartArgs ++ Rest]);
+            Arg1 = [StartArgs ++ Rest],
+            notify_handler_executing(M, F, Arg1, Options),
+            apply(M, F, Arg1);
         2 ->
-            apply(M, F, [StartType, StartArgs ++ Rest]);
+            Arg2 = [StartType, StartArgs ++ Rest],
+            notify_handler_executing(M, F, Arg2, Options),
+            apply(M, F, Arg2);
         _ ->            
             fail(Conf, ignored)
     end.
+
+notify_handler_executing(M, F, A, Options) ->
+    appstart:notify("Calling handler ~p:~p with args ~p~n", [M, F, A], Options).

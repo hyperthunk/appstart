@@ -28,10 +28,12 @@
 %% -----------------------------------------------------------------------------
 
 -module(appstart).
--export([start/1, 
-         start/2, 
-         start_deps/1,
-         load/1]).
+-export([start/1,
+         start/2,
+         start/3,
+         start_deps/2,
+         load/1,
+         notify/3]).
 
 -define(FIND_ERROR_PREDICATE, fun({error, _}) -> true; (_) -> false end).
 
@@ -49,87 +51,111 @@ start(App) ->
 %% passed directly on to application:start/2).
 start(App, _) when App =:= kernel, App =:= stdlib ->
     ok;
-start(App, Type) when is_atom(App) ->
-    start_it(App, Type, fun start_app/3).
+start(App, Options) when is_atom(App) andalso is_list(Options) ->
+    start(App, temporary, Options);
+start(App, Type) when is_atom(App) andalso is_atom(Type) ->
+    start_it(App, Type, [], fun start_app/4).
 
-start_deps(App) ->
-    start_it(App, ignored, fun start_deps/3).
+%% @doc As start/1, but accepts a Type specification which is
+%% passed directly on to application:start/2), and a proplist
+%% containing settings used internally by appstart.
+start(App, Type, Options) when is_atom(App) andalso
+                              is_atom(Type) andalso
+                              is_list(Options) ->
+    start_it(App, Type, Options, fun start_app/4).
 
-start_deps(_, Config, _) ->
-    start_app_deps(Config).
+start_deps(App, Options) ->
+    start_it(App, temporary, Options, fun start_deps/4).
 
-start_app_deps(Config) ->
-    Apps = [start(A) || A <- proplists:get_value(applications, Config, [])],
+start_deps(_, Config, _, Options) ->
+    start_app_deps(Config, Options).
+
+start_app_deps(Config, Options) ->
+    Apps = [start(A, Options) || A <- proplists:get_value(applications, Config, [])],
     case lists:any(?FIND_ERROR_PREDICATE, Apps) of
         true ->
-            {error, {dependents, lists:filter(?FIND_ERROR_PREDICATE, Apps)}};
+            {error, {dependants, lists:filter(?FIND_ERROR_PREDICATE, Apps)}};
         false ->
             Apps
     end.
 
-start_app(App, Config, Type) ->
-    case start_app_deps(Config) of
+start_app(App, Config, Type, Options) ->
+    case start_app_deps(Config, Options) of
         {error, _}=Error ->
+            notify("Unable to start dependant applications: ~p~n", [Error], Options),
             Error;
-        _ -> 
-            application:start(App, Type)
+        _ ->
+            notify("Starting application ~p (~p)~n", [App, Type], Options),
+            Res = application:start(App, Type),
+            notify("application:start/2 = ~p~n", [Res], Options),
+            Res
     end.
 
-start_it(App, Type, Callback) ->
-    case lookup_app(App) of
+start_it(App, Type, Options, Callback) ->
+    case lookup_app(App, Options) of
         already_loaded ->
             already_loaded;
         {error,_}=Err ->
             Err;
         {load_from, _Path} ->
             %% we're looking at one of two possible situations:
-            %% (a) the lib_dir for App is in an .ez archive 
+            %% (a) the lib_dir for App is in an .ez archive
             %% (b) we're running on beam loaded into an escript (archive)
+            notify("Explicit application:load/1 required for ~p~n", [App], Options),
             case application:load(App) of
                 {error, {already_loaded, App}} ->
                     already_loaded;
                 {error, _}=Failed ->
+                    notify("Failed to load ~p: ~p~n", [App, Failed], Options),
                     Failed;
                 ok ->
                     {ok, KeySet} = application:get_all_key(App),
-                    Callback(App, KeySet, Type)
+                    notify("Found keyset for app ~p~n", [App], Options),
+                    notify("Callback: ~s~n", [callback_info(Callback)], Options),
+                    Callback(App, KeySet, Type, Options)
             end;
         {application, App, Config} ->
             %% TODO: check for configuration overrides here....
-            Callback(App, Config, Type)
+            notify("Callback: ~s~n", [callback_info(Callback)], Options),
+            Callback(App, Config, Type, Options)
     end.
 
-lookup_app(App) ->
+lookup_app(App, Options) ->
     Loaded = [AppName ||
                 {AppName, _, _} <- application:which_applications(),
                 AppName =:= App],
     case length(Loaded) > 0 of
         false ->
-            lookup_appfile(App);
+            lookup_appfile(App, Options);
         true ->
+            notify("App ~p is already loaded~n", [App], Options),
             already_loaded
     end.
 
-lookup_appfile(App) ->
+lookup_appfile(App, Options) ->
     AppFile = atom_to_list(App) ++ ".app",
+    notify("Searching for application config ~s~n", [App], Options),
     case code:where_is_file(AppFile) of
         non_existing ->
-            find_irregular_appfile(App, AppFile);
+            find_irregular_appfile(App, AppFile, Options);
         Path ->
             case filelib:is_regular(Path) of
                 true ->
-                    sanitize_path(Path);
+                    sanitize_path(Path, Options);
                 false ->
-                    find_irregular_appfile(App, AppFile)
+                    find_irregular_appfile(App, AppFile, Options)
             end
     end.
 
-sanitize_path(Path) ->
+sanitize_path(Path, Options) ->
+    notify("Adjusting path ~s to current environment~n", [Path], Options),
     case lists:prefix(code:lib_dir(), Path) of
         true ->
             {load_from, Path};
         false ->
             case file:consult(Path) of
+                {ok, [{application, _App, _Config}=AppConf]} ->
+                    AppConf;
                 {ok, {application, _App, _Config}=AppData} ->
                    AppData;
                 {error, _} ->
@@ -138,23 +164,40 @@ sanitize_path(Path) ->
     end.
 
 %% because not everyone follows OTP principles...
-find_irregular_appfile(App, AppFile) ->
+find_irregular_appfile(App, AppFile, Options) ->
     case code:lib_dir(App, src) of
         {error, bad_name} ->
             {error, {no_lib_dir, App}};
         LibDir ->
             case filelib:is_dir(LibDir) of
                 true ->
-                    find_in_libdir(App, AppFile, LibDir);
+                    find_in_libdir(App, AppFile, LibDir, Options);
                 false ->
                     {load_from, LibDir}
             end
     end.
 
-find_in_libdir(App, AppFile, LibDir) ->
+find_in_libdir(App, AppFile, LibDir, Options) ->
     case filelib:wildcard(filename:join(LibDir, AppFile) ++ "*") of
-        [F] -> 
-            sanitize_path(F);
-        _ -> 
+        [F] ->
+            sanitize_path(F, Options);
+        _ ->
             {error, {no_app_file, App}}
     end.
+
+notify(Format, Args, Options) ->
+    Notice = "[APPSTART]  " ++ Format,
+    case proplists:get_value(logging, Options) of
+        console ->
+            io:format(Notice, Args);
+        {M, F} ->
+            apply(M, F, [Notice, Args]);
+        _ ->
+            ignored
+    end.
+
+callback_info(Callback) ->
+    PList = erlang:fun_info(Callback),
+    Mod = proplists:get_value(module, PList),
+    Func = proplists:get_value(name, PList),
+    atom_to_list(Mod) ++ ":" ++ atom_to_list(Func).
