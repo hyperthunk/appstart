@@ -1,0 +1,12 @@
+{application, appstart,
+ [
+  {description,"OTP Application Startup Helper"},
+  {vsn,"0.0.2"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { appstart_app, []}},
+  {env, []}
+ ]}.
