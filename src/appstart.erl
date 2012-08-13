@@ -104,21 +104,24 @@ start_it(App, Type, Options, Callback) ->
             notify("Explicit application:load/1 required for ~p~n", [App], Options),
             case application:load(App) of
                 {error, {already_loaded, App}} ->
-                    already_loaded;
+                    start_it2(App, Type, Options, Callback);
                 {error, _}=Failed ->
                     notify("Failed to load ~p: ~p~n", [App, Failed], Options),
                     Failed;
                 ok ->
-                    {ok, KeySet} = application:get_all_key(App),
-                    notify("Found keyset for app ~p~n", [App], Options),
-                    notify("Callback: ~s~n", [callback_info(Callback)], Options),
-                    Callback(App, KeySet, Type, Options)
+                    start_it2(App, Type, Options, Callback)
             end;
         {application, App, Config} ->
             %% TODO: check for configuration overrides here....
             notify("Callback: ~s~n", [callback_info(Callback)], Options),
             Callback(App, Config, Type, Options)
     end.
+
+start_it2(App, Type, Options, Callback) ->
+    {ok, KeySet} = application:get_all_key(App),
+    notify("Found keyset for app ~p~n", [App], Options),
+    notify("Callback: ~s~n", [callback_info(Callback)], Options),
+    Callback(App, KeySet, Type, Options).
 
 lookup_app(App, Options) ->
     Loaded = [AppName ||
