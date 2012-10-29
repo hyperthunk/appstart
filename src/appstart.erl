@@ -93,7 +93,7 @@ start_app(App, Config, Type, Options) ->
 
 start_it(App, Type, Opt, Callback) ->
     Env = application:get_all_env(appstart),
-    Options = lists:concat(Opt, Env),
+    Options = lists:concat([Opt, Env]),
     case lookup_app(App, Options) of
         already_loaded ->
             already_loaded;
