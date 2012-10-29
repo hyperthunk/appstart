@@ -197,6 +197,8 @@ notify(Format, Args, Options) ->
             io:format(Notice, Args);
         {M, F} ->
             apply(M, F, [Notice, Args]);
+        {file, Path} ->
+            file:write(Path, io_lib:format(Notice, Args), [append]);
         _ ->
             ignored
     end.
