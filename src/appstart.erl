@@ -67,11 +67,11 @@ start(App, Type, Options) when is_atom(App) andalso
 start_deps(App, Options) ->
     start_it(App, temporary, Options, fun start_deps/4).
 
-start_deps(_, Config, _, Options) ->
-    start_app_deps(Config, Options).
+start_deps(_, Config, Type, Options) ->
+    start_app_deps(Config, Type, Options).
 
-start_app_deps(Config, Options) ->
-    Apps = [start(A, Options) || A <- proplists:get_value(applications, Config, [])],
+start_app_deps(Config, Type, Options) ->
+    Apps = [start(A, Type, Options) || A <- proplists:get_value(applications, Config, [])],
     case lists:any(?FIND_ERROR_PREDICATE, Apps) of
         true ->
             {error, {dependants, lists:filter(?FIND_ERROR_PREDICATE, Apps)}};
@@ -80,7 +80,7 @@ start_app_deps(Config, Options) ->
     end.
 
 start_app(App, Config, Type, Options) ->
-    case start_app_deps(Config, Options) of
+    case start_app_deps(Config, Type, Options) of
         {error, _}=Error ->
             notify("Unable to start dependant applications: ~p~n", [Error], Options),
             Error;
@@ -91,7 +91,9 @@ start_app(App, Config, Type, Options) ->
             Res
     end.
 
-start_it(App, Type, Options, Callback) ->
+start_it(App, Type, Opt, Callback) ->
+    Env = application:get_all_env(appstart),
+    Options = lists:concat(Opt, Env),
     case lookup_app(App, Options) of
         already_loaded ->
             already_loaded;

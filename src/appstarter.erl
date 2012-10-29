@@ -28,7 +28,6 @@
 %% appstart config section of your application's `env' key.
 %%
 %% -----------------------------------------------------------------------------
-
 -module(appstarter).
 -author('Tim Watson <watson.timothy@gmail.com>').
 -behaviour(application).
